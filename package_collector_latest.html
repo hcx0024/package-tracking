@@ -172,7 +172,24 @@
     const LS_ROWS    = 'pkg_rows_v1';
     const PING_SECS  = 30;
 
-    function normTrack(x){ return String(x||'').replace(/[\\u200B-\\u200D\\uFEFF]/g,'').trim().replace(/[\\s-]+/g,'').toUpperCase(); }
+    function normTrack(x){ 
+      return String(x||'')
+        .replace(/[\u200B-\u200D\uFEFF]/g,'')   // 零宽
+        .trim()
+        .replace(/[\s-]+/g,'')                  // 去空格/连字符
+        .toUpperCase();
+    }
+
+    // 追踪号校验（防止科学计数法/小数点/非法字符/过短）
+    function validateTrackingRaw(raw){
+      const s = String(raw ?? '');
+      if (/[.]/.test(s) || /e\+?/i.test(s)) return {ok:false, reason:'检测到科学计数法/小数点'};
+      const n = normTrack(s);
+      if (!n) return {ok:false, reason:'为空'};
+      if (!/^[A-Z0-9]+$/.test(n)) return {ok:false, reason:'存在非字母数字字符'};
+      if (n.length < 10) return {ok:false, reason:'长度过短（<10）'};
+      return {ok:true, norm:n};
+    }
 
     let weights = {};
     let rows = [];
@@ -185,9 +202,9 @@
     const cloudStatus = $('#cloudStatus');
     const diag = document.getElementById('diag');
 
-    function dlog(...a){ const msg = a.map(x => typeof x==='string'? x : JSON.stringify(x)).join(' '); if(diag) diag.textContent += msg + '\\n'; }
+    function dlog(...a){ const msg = a.map(x => typeof x==='string'? x : JSON.stringify(x)).join(' '); if(diag) diag.textContent += msg + '\n'; }
 
-    function escapeHtml(s){ return String(s).replace(/[&<>\\\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\\"":"&quot;","'":"&#39;"}[c])); }
+    function escapeHtml(s){ return String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
     function save(){ localStorage.setItem(LS_WEIGHTS, JSON.stringify(weights)); localStorage.setItem(LS_ROWS, JSON.stringify(rows)); }
     function load(){
       try{weights = JSON.parse(localStorage.getItem(LS_WEIGHTS)||'{}')||{}}catch{weights={}}
@@ -208,16 +225,18 @@
         mainTbody.appendChild(tr); }
       summaryTbody.innerHTML = '';
       for(const name of Object.keys(perName).sort((a,b)=>a.localeCompare(b))){ const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${perNameCount[name]||0}</td><td>${(perName[name]||0).toFixed(2)}</td>`; summaryTbody.appendChild(tr); }
+        tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${(perNameCount[name]||0)}</td><td>${(perName[name]||0).toFixed(2)}</td>`; summaryTbody.appendChild(tr); }
       grandTotal.textContent = `总重量：${totalAll.toFixed(2)} kg`;
-      const knownCount = Object.keys(weights).length; weightsStatus.textContent = knownCount? `已载入 ${knownCount} 条单号重量。` : '未加载。'; save();
+      const knownCount = Object.keys(weights).length; if(weightsStatus) weightsStatus.textContent = knownCount? `已载入 ${knownCount} 条单号重量。` : '未加载。'; save();
     }
 
+    // 修正换行正则（真实 \r/\n）
     function parseCSV(text){
       if(text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-      text = text.replace(/\\r\\n?/g, '\\n');
-      return text.split('\\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/[,\t，]/).map(s=>s.trim()));
+      text = text.replace(/\r\n?/g, '\n');
+      return text.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/[,	，]/).map(s=>s.trim()));
     }
+
     function importRowsAsWeights(rowsParsed){
       let cnt=0, skipped=0;
       const hasHeader = rowsParsed.length>0 && rowsParsed[0].length>=2 && (/track|order|waybill|单号|运单|物流/i.test(rowsParsed[0][0]) || /weight|重量/i.test(rowsParsed[0][1]));
@@ -232,54 +251,146 @@
 
     function downloadCSV(filename, text){ const blob = new Blob([text], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
 
-    // 本地事件
-    document.getElementById('btnAddWeight').addEventListener('click', ()=>{ const t = normTrack(document.getElementById('weightTrackInput').value);
+    // 本地事件（重量表）
+    document.getElementById('btnAddWeight').addEventListener('click', ()=>{
+      const t = normTrack(document.getElementById('weightTrackInput').value);
       const vRaw = (document.getElementById('weightValueInput').value||'').trim(); const v = Number(vRaw.replace(',', '.'));
       if(!t){ alert('请填写快递单号'); return; } if(!vRaw || isNaN(v)){ alert('请填写有效的重量(kg)'); return; }
-      weights[t] = v; document.getElementById('weightTrackInput').value=''; document.getElementById('weightValueInput').value=''; render(); });
+      weights[t] = v; document.getElementById('weightTrackInput').value=''; document.getElementById('weightValueInput').value=''; render();
+    });
     document.getElementById('btnBulkWeights').addEventListener('click', ()=>{ document.getElementById('weightsBulkText').value=''; document.getElementById('weightsBulkDialog').showModal(); });
-    document.getElementById('weightsBulkConfirm').addEventListener('click', (e)=>{ e.preventDefault(); const {cnt, skipped} = importRowsAsWeights(parseCSV(document.getElementById('weightsBulkText').value));
-      document.getElementById('weightsBulkDialog').close(); alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`); render(); });
+    document.getElementById('weightsBulkConfirm').addEventListener('click', (e)=>{
+      e.preventDefault(); const {cnt, skipped} = importRowsAsWeights(parseCSV(document.getElementById('weightsBulkText').value));
+      document.getElementById('weightsBulkDialog').close(); alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`); render();
+    });
     document.getElementById('btnClearWeights').addEventListener('click', ()=>{ if(confirm('确定要清空重量表吗？')) { weights = {}; render(); } });
-    document.getElementById('btnExportWeights').addEventListener('click', ()=>{ const lines=['tracking,weight']; for(const [k,v] of Object.entries(weights)){ lines.push(`${k},${v}`); } downloadCSV('weights_export.csv', lines.join('\\n')); });
-    document.getElementById('btnLoadWeights').addEventListener('click', async ()=>{ const file = document.getElementById('weightsFile').files?.[0]; if(!file){ alert('请选择一个 CSV 文件'); return; }
+    document.getElementById('btnExportWeights').addEventListener('click', ()=>{
+      const lines=['tracking,weight']; for(const [k,v] of Object.entries(weights)){ lines.push(`${k},${v}`); } downloadCSV('weights_export.csv', lines.join('\n'));
+    });
+    document.getElementById('btnLoadWeights').addEventListener('click', async ()=>{
+      const file = document.getElementById('weightsFile').files?.[0]; if(!file){ alert('请选择一个 CSV 文件'); return; }
       const txt = await file.text(); let rowsParsed = parseCSV(txt);
-      if(rowsParsed.length === 1){ const text2 = txt.replace(/\\n/g, '\\r').replace(/\\r\\r+/g, '\\r'); const lines2 = text2.split('\\r'); if(lines2.length > 1){ rowsParsed = lines2.map(l => l.trim()).filter(Boolean).map(l => l.split(/[,\t，]/).map(s => s.trim())); } }
-      const {cnt, skipped} = importRowsAsWeights(rowsParsed); alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`); render(); });
+      if(rowsParsed.length === 1){ const text2 = txt.replace(/\n/g, '\r').replace(/\r\r+/g, '\r'); const lines2 = text2.split('\r'); if(lines2.length > 1){ rowsParsed = lines2.map(l => l.trim()).filter(Boolean).map(l => l.split(/[,	，]/).map(s => s.trim())); } }
+      const {cnt, skipped} = importRowsAsWeights(rowsParsed); alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`); render();
+    });
 
-    document.getElementById('btnAdd').addEventListener('click', ()=>{ const name = (document.getElementById('nameInput').value||'').trim(); const trk = normTrack(document.getElementById('trackInput').value);
-      if(!name||!trk){ alert('姓名和单号都需要填写'); return; } rows.push({name, tracking: trk}); document.getElementById('nameInput').value=''; document.getElementById('trackInput').value=''; render(); });
-    document.getElementById('btnExportRows').addEventListener('click', ()=>{ const lines=['name,tracking']; for(const r of rows) lines.push(`${r.name},${r.tracking}`); downloadCSV('filled_rows.csv', lines.join('\\n')); });
+    // 本地事件（姓名+单号） —— 启用校验 + 本地重复仅提示不拦截
+    document.getElementById('btnAdd').addEventListener('click', ()=>{
+      const name = (document.getElementById('nameInput').value||'').trim();
+      const raw  = (document.getElementById('trackInput').value||'');
+      if(!name){ alert('请填写姓名'); return; }
+      const chk = validateTrackingRaw(raw);
+      if(!chk.ok){ alert(`单号不合法：${chk.reason}\n原始输入: "${raw}"`); return; }
+      const trk = chk.norm;
+
+      // 仅提示本地重复（不去重）
+      const dup = rows.some(r => r.name.trim()===name && normTrack(r.tracking)===trk);
+      if(dup){
+        if(!confirm(`检测到本地已存在相同条目：\n${name} , ${trk}\n是否仍要添加？`)) return;
+      }
+
+      rows.push({name, tracking: trk});
+      document.getElementById('nameInput').value=''; document.getElementById('trackInput').value='';
+      render();
+    });
+
+    document.getElementById('btnExportRows').addEventListener('click', ()=>{
+      const lines=['name,tracking']; for(const r of rows) lines.push(`${r.name},${r.tracking}`); downloadCSV('filled_rows.csv', lines.join('\n'));
+    });
     document.getElementById('btnClearRows').addEventListener('click', ()=>{ if(confirm('确定要清空所有填报吗？')){ rows=[]; render(); } });
     document.getElementById('btnPrint').addEventListener('click', ()=>{ window.print(); });
+
     document.getElementById('btnBulk').addEventListener('click', ()=>{ document.getElementById('bulkText').value=''; document.getElementById('bulkDialog').showModal(); });
-    document.getElementById('bulkConfirm').addEventListener('click', (e)=>{ e.preventDefault(); const lines = parseCSV(document.getElementById('bulkText').value); let added=0;
-      for(const r of lines){ if(r.length<2) continue; let [a,b]=r; a=String(a).trim(); b=String(b).trim(); const AisTrack=/\\d/.test(a); const BisTrack=/\\d/.test(b);
-        if(AisTrack && !BisTrack) { rows.push({name:b, tracking:normTrack(a)}); added++; }
-        else if(BisTrack && !AisTrack) { rows.push({name:a, tracking:normTrack(b)}); added++; }
-        else { rows.push({name:a, tracking:normTrack(b)}); added++; } }
-      document.getElementById('bulkDialog').close(); alert(`已添加 ${added} 条记录`); render(); });
+    document.getElementById('bulkConfirm').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const lines = parseCSV(document.getElementById('bulkText').value);
+      let added=0, bad=[], dupWarn=0;
+      for(const r of lines){
+        if(r.length<2) continue;
+        let [a,b]=r; a=String(a).trim(); b=String(b).trim();
+        const AisTrack=/\d/.test(a); const BisTrack=/\d/.test(b);
+        const candidate = AisTrack && !BisTrack ? a : (!AisTrack && BisTrack ? b : b);
+        const name = (candidate===a)? b : a;
+        const chk  = validateTrackingRaw(candidate);
+        if(!chk.ok){ bad.push({line:r.join(','), reason:chk.reason}); continue; }
+        const trk = chk.norm;
 
-    // 云端（text/plain 上传）
+        // 仅提示重复，不拦截
+        const dup = rows.some(x => x.name.trim()===name && normTrack(x.tracking)===trk);
+        if(dup) dupWarn++;
+
+        rows.push({name, tracking: trk});
+        added++;
+      }
+      document.getElementById('bulkDialog').close();
+      let msg = `批量导入完成：新增 ${added} 条`;
+      if(dupWarn) msg += `；其中 ${dupWarn} 条与本地重复（已保留，未去重）。`;
+      if(bad.length) msg += `；非法 ${bad.length} 条（已跳过）。`;
+      alert(msg);
+      if (bad.length && diag) {
+        diag.textContent += `[BULK BAD] 示例（最多 10 条）：\n`+
+          bad.slice(0,10).map(x=>` - ${x.line}  => ${x.reason}`).join('\n')+'\n';
+      }
+      render();
+    });
+
+    // 云端（保持 text/plain 上传，不做去重上传）
     function updateCloudStatus(ok,msg){ cloudStatus.innerHTML = (ok? '<span class=success>✓</span> ':'<span class=error>✗</span> ')+ (msg||''); }
-    async function cloudGet(){ const r = await fetch(HARDBOUND_URL+'?t='+(Date.now()), {method:'GET', redirect:'follow'});
+    async function cloudGet(){
+      const r = await fetch(HARDBOUND_URL+'?t='+(Date.now()), {method:'GET', redirect:'follow'});
       const text = await r.text(); const data = JSON.parse(text);
-      const wMap = {}; for(const arr of (data.weights||[]).slice(1)){ if(!arr) continue; const k = normTrack(arr[0]); const v = Number(arr[1]); if(k && !isNaN(v)) wMap[k]=v; }
-      weights = wMap; rows = (data.rows||[]).slice(1).map(a=>({name:String(a[0]||'').trim(), tracking: normTrack(a[1])})); render();
-      updateCloudStatus(true, '已拉取云端最新：'+ (new Date(data.updatedAt||Date.now())).toLocaleString()); }
-    async function cloudPost(payload){ const r = await fetch(HARDBOUND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload), redirect:'follow' });
-      const text = await r.text(); try{ return JSON.parse(text); }catch(e){ throw new Error('返回不是 JSON：'+ text.slice(0,200)); } }
+      const wMap = {}; for(const arr of (data.weights||[]).slice(1)){ if(!arr) continue; const k = normTrack(String(arr[0])); const v = Number(arr[1]); if(k && !isNaN(v)) wMap[k]=v; }
+      weights = wMap;
 
-    document.getElementById('btnSelfTest').addEventListener('click', async ()=>{ try{ await cloudGet(); await cloudPost({op:'appendRows', rows:[{name:'(自检)', tracking:'TEST123'}]}); updateCloudStatus(true, '自检 OK'); }
-      catch(e){ console.error(e); updateCloudStatus(false, '自检失败：'+ e.message); alert('自检失败：'+ e.message); } });
-    document.getElementById('btnPull').addEventListener('click', async ()=>{ try{ await cloudGet(); }catch(e){ console.error(e); updateCloudStatus(false, e.message); alert(e.message); } });
-    document.getElementById('btnPushRows').addEventListener('click', async ()=>{ try{ const res = await cloudPost({ op:'appendRows', rows }); updateCloudStatus(true, '已追加 '+rows.length+' 条到云端。'); }
-      catch(e){ console.error(e); updateCloudStatus(false,e.message); alert(e.message); } });
-    document.getElementById('btnPushWeights').addEventListener('click', async ()=>{ try{ const arr = Object.entries(weights).map(([k,v])=>({tracking:k, weight:Number(v)})); const res = await cloudPost({ op:'upsertWeights', weights: arr }); updateCloudStatus(true, '已上传/更新 '+arr.length+' 条重量到云端。'); }
-      catch(e){ console.error(e); updateCloudStatus(false,e.message); alert(e.message); } });
+      // 拉取 rows 时也按字符串处理 & 归一化
+      rows = (data.rows||[]).slice(1).map(a=>{
+        const nm = String(a?.[0] ?? '').trim();
+        const raw = String(a?.[1] ?? '');
+        const chk = validateTrackingRaw(raw);
+        return {name:nm, tracking: chk.ok ? chk.norm : normTrack(raw)};
+      });
+
+      render();
+      updateCloudStatus(true, '已拉取云端最新：'+ (new Date(data.updatedAt||Date.now())).toLocaleString());
+    }
+    async function cloudPost(payload){
+      const r = await fetch(HARDBOUND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload), redirect:'follow' });
+      const text = await r.text(); try{ return JSON.parse(text); }catch(e){ throw new Error('返回不是 JSON：'+ text.slice(0,200)); }
+    }
+
+    document.getElementById('btnSelfTest').addEventListener('click', async ()=>{
+      try{ await cloudGet(); await cloudPost({op:'appendRows', rows:[{name:'(自检)', tracking:'TEST123'}]}); updateCloudStatus(true, '自检 OK'); }
+      catch(e){ console.error(e); updateCloudStatus(false, '自检失败：'+ e.message); alert('自检失败：'+ e.message); }
+    });
+    document.getElementById('btnPull').addEventListener('click', async ()=>{
+      try{ await cloudGet(); }catch(e){ console.error(e); updateCloudStatus(false, e.message); alert(e.message); }
+    });
+    document.getElementById('btnPushRows').addEventListener('click', async ()=>{
+      try{
+        // 直接上传，不做去重；此处维持原有行为
+        const res = await cloudPost({ op:'appendRows', rows });
+        updateCloudStatus(true, '已追加 '+rows.length+' 条到云端。');
+      } catch(e){
+        console.error(e); updateCloudStatus(false,e.message); alert(e.message);
+      }
+    });
+    document.getElementById('btnPushWeights').addEventListener('click', async ()=>{
+      try{ const arr = Object.entries(weights).map(([k,v])=>({tracking:k, weight:Number(v)})); const res = await cloudPost({ op:'upsertWeights', weights: arr }); updateCloudStatus(true, '已上传/更新 '+arr.length+' 条重量到云端。'); }
+      catch(e){ console.error(e); updateCloudStatus(false,e.message); alert(e.message); }
+    });
 
     // 初始：自动拉取一次
     (async ()=>{ try{ await cloudGet(); } catch(e){ updateCloudStatus(false, '拉取失败：'+e.message+' · 请检查 WebApp 权限为“任何人”。'); } })();
+
+    // 可选：30s 自动拉取
+    const auto = document.getElementById('autoSync');
+    let timer = null;
+    function startAuto(){
+      if(timer) clearInterval(timer);
+      if(auto && auto.checked) timer = setInterval(()=> cloudGet().catch(()=>{}), PING_SECS*1000);
+    }
+    auto && auto.addEventListener('change', startAuto);
+    startAuto();
   </script>
 </body>
 </html>
