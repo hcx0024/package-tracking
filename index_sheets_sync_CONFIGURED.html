@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>包裹汇总（自助填报 · Google Sheets 同步版）</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#9ca3af;--text:#e5e7eb;--accent:#22d3ee;--good:#10b981;--warn:#f59e0b;--bad:#ef4444}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b1220,#0b1220 60%,#0f172a);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,PingFang SC,Noto Sans SC,"Microsoft YaHei",sans-serif;color:var(--text)}
+    .container{max-width:1100px;margin:32px auto;padding:0 16px}
+    .row{display:flex;gap:16px;flex-wrap:wrap}
+    .card{background:rgba(17,24,39,.8);backdrop-filter:saturate(1.2) blur(5px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:18px}
+    h1{font-size:28px;margin:0 0 12px;letter-spacing:.5px}
+    h2{font-size:20px;margin:0 0 10px;color:#cbd5e1}
+    p{margin:8px 0;color:var(--muted)}
+    input,button,select,textarea{background:#0b1020;color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px}
+    input:focus,textarea:focus,select:focus{outline:2px solid rgba(34,211,238,.45);border-color:rgba(34,211,238,.2)}
+    button{cursor:pointer}
+    .btn{background:linear-gradient(180deg,#1f9cae,#0aa5b5);border:none;color:#032026;font-weight:700}
+    .btn.secondary{background:#0b1020;border:1px solid rgba(34,211,238,.3);color:#9be8f3}
+    .btn.danger{background:linear-gradient(180deg,#f97316,#ef4444);color:white;border:none}
+    .btn.muted{background:#0b1020;border:1px solid rgba(255,255,255,.12);color:#cbd5e1}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+    .col-4{grid-column:span 4}
+    .col-8{grid-column:span 8}
+    @media (max-width:900px){.col-4,.col-8{grid-column:span 12}}
+    table{width:100%;border-collapse:collapse;border-spacing:0}
+    th,td{padding:10px 8px;text-align:left;border-bottom:1px dashed rgba(255,255,255,.08);vertical-align:top}
+    th{color:#cbd5e1;font-weight:600}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid rgba(255,255,255,.12);color:#a5f3fc}
+    .right{display:flex;gap:10px;justify-content:flex-end}
+    .hint{font-size:12px;color:#9ca3af}
+    .tag-warn{color:#fbbf24}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .sync{font-size:12px;margin-left:8px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>包裹汇总 · 自助填报 <span class="pill">Google Sheets 同步</span></h1>
+    <p>说明：多人在不同设备操作时，数据将写入同一个 Google 表格；打开网页会从表格载入最新数据。若网络不可用，会降级到本地保存。</p>
+
+    <div class="grid">
+      <div class="col-4">
+        <div class="card">
+          <h2>① 录入/导入 重量表</h2>
+          <p class="hint">支持手动、批量粘贴或 CSV 导入；同步到云端后，所有人会看到最新重量。</p>
+          <div class="row" style="margin-bottom:8px">
+            <input id="weightTrackInput" placeholder="快递单号" style="flex:1" />
+            <input id="weightValueInput" placeholder="重量(kg)" style="width:140px" />
+            <button class="btn" id="btnAddWeight">添加/更新</button>
+            <button class="btn muted" id="btnBulkWeights">批量粘贴</button>
+          </div>
+
+          <div class="row" style="align-items:center">
+            <input id="weightsFile" type="file" accept=".csv" />
+            <button class="btn" id="btnLoadWeights">载入CSV</button>
+            <button class="btn secondary" id="btnExportWeights">导出重量CSV</button>
+            <button class="btn danger" id="btnClearWeights">清空重量表</button>
+          </div>
+          <p id="weightsStatus" class="hint">未加载。</p>
+        </div>
+      </div>
+
+      <div class="col-8">
+        <div class="card">
+          <h2>② 填写：姓名 + 快递单号</h2>
+          <div class="row">
+            <input id="nameInput" placeholder="姓名（必填）" style="flex:1" />
+            <input id="trackInput" placeholder="快递单号（必填）" style="flex:1" />
+            <button class="btn" id="btnAdd">添加</button>
+            <button class="btn muted" id="btnBulk">批量粘贴</button>
+          </div>
+          <p class="hint">批量格式：每行 <span class="mono">姓名,单号</span> 或 <span class="mono">单号,姓名</span> 自动识别。</p>
+          <div class="right" style="margin-top:8px">
+            <button class="btn secondary" id="btnExportRows">导出填报CSV</button>
+            <button class="btn danger" id="btnClearRows">清空填报</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <h2>③ 打印表（姓名 · 快递单号 · 总重量）</h2>
+            <div class="right">
+              <button class="btn muted" id="btnPrint">打印此表</button>
+              <button class="btn" id="btnSyncPull">从云端拉取</button>
+              <button class="btn secondary" id="btnSyncPush">把本地变更推送到云端</button>
+              <span id="syncStatus" class="sync hint">未连接</span>
+            </div>
+          </div>
+          <table id="mainTable">
+            <thead>
+              <tr>
+                <th style="width:22%">姓名</th>
+                <th style="width:28%">快递单号</th>
+                <th style="width:25%">单件重量(kg)</th>
+                <th style="width:25%">该姓名总重量(kg)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <h2>汇总：每人总重量</h2>
+            <span id="grandTotal" class="pill">总重量：0 kg</span>
+          </div>
+          <table id="summaryTable">
+            <thead>
+              <tr>
+                <th style="width:40%;">姓名</th>
+                <th style="width:30%;">包裹数</th>
+                <th style="width:30%;">总重量(kg)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="bulkDialog" style="max-width:800px;width:90%">
+    <form method="dialog" style="margin:0">
+      <div class="card" style="background:#0b1020">
+        <h2>批量粘贴</h2>
+        <p class="hint">每行一个记录：<span class="mono">姓名,单号</span> 或 <span class="mono">单号,姓名</span></p>
+        <textarea id="bulkText" rows="10" style="width:100%" placeholder="示例：&#10;张三,SF123&#10;YT555,李四"></textarea>
+        <div class="right" style="margin-top:10px">
+          <button class="btn muted" value="cancel">取消</button>
+          <button class="btn" id="bulkConfirm" value="default">添加</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="weightsBulkDialog" style="max-width:800px;width:90%">
+    <form method="dialog" style="margin:0">
+      <div class="card" style="background:#0b1020">
+        <h2>批量粘贴（重量表）</h2>
+        <p class="hint">每行一个：<span class="mono">tracking,weight</span> 或 <span class="mono">weight,tracking</span>，示例：<span class="mono">SF123,2.5</span></p>
+        <textarea id="weightsBulkText" rows="10" style="width:100%" placeholder="示例：&#10;SF123,2.5&#10;1.05,YT555"></textarea>
+        <div class="right" style="margin-top:10px">
+          <button class="btn muted" value="cancel">取消</button>
+          <button class="btn" id="weightsBulkConfirm" value="default">导入</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const GAS_BASE = 'https://script.google.com/macros/s/AKfycbwWDIFVVh5iXS4RnOCctuq_lr7Cz5qOVlTiHQ5ehD5HdyTdDrxFxYVaFm9RXls11X8V/exec'; // TODO: 替换
+
+    const LS_WEIGHTS = 'pkg_weights_v1';
+    const LS_ROWS    = 'pkg_rows_v1';
+    let weights = {};
+    let rows = [];
+    let unsynced = {weights: [], rows: []};
+
+    const $ = (s)=>document.querySelector(s);
+    const weightsFile = $('#weightsFile');
+    const weightsStatus = $('#weightsStatus');
+    const nameInput = $('#nameInput');
+    const trackInput = $('#trackInput');
+    const mainTbody = $('#mainTable tbody');
+    const summaryTbody = $('#summaryTable tbody');
+    const grandTotal = $('#grandTotal');
+    const syncStatus = $('#syncStatus');
+    const bulkDialog = document.getElementById('bulkDialog');
+    const bulkText = document.getElementById('bulkText');
+    const weightTrackInput = document.getElementById('weightTrackInput');
+    const weightValueInput = document.getElementById('weightValueInput');
+    const weightsBulkDialog = document.getElementById('weightsBulkDialog');
+    const weightsBulkText = document.getElementById('weightsBulkText');
+
+    function save(){ localStorage.setItem(LS_WEIGHTS, JSON.stringify(weights)); localStorage.setItem(LS_ROWS, JSON.stringify(rows)); }
+    function load(){ try{weights=JSON.parse(localStorage.getItem(LS_WEIGHTS)||'{}')||{}}catch{weights={}} try{rows=JSON.parse(localStorage.getItem(LS_ROWS)||'[]')||[]}catch{rows=[]} }
+
+    function parseCSV(text){ return text.trim().split(/\\r?\\n/).map(l=>l.split(',').map(s=>s.trim())); }
+    function escapeHtml(s){ return String(s).replace(/[&<>\\\"']/g,c=>({\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",\"\\\"\":\"&quot;\",\"'\":\"&#39;\"}[c])); }
+
+    function render(){
+      const perName = {}; const perNameCount={}; let totalAll=0;
+      for(const r of rows){ const w = Number(weights[r.tracking])||0; perName[r.name]=(perName[r.name]||0)+w; perNameCount[r.name]=(perNameCount[r.name]||0)+1; totalAll+=w; }
+      mainTbody.innerHTML='';
+      const sorted=[...rows].sort((a,b)=> a.name.localeCompare(b.name)||a.tracking.localeCompare(b.tracking));
+      for(const r of sorted){
+        const w=Number(weights[r.tracking]); const known=!isNaN(w);
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${escapeHtml(r.name)}</td><td class="mono">${escapeHtml(r.tracking)} ${known?'':'<span class="pill tag-warn">未找到重量</span>'}</td><td>${known?w.toFixed(2):'<span class="tag-warn">—</span>'}</td><td>${(perName[r.name]||0).toFixed(2)}</td>`;
+        mainTbody.appendChild(tr);
+      }
+      summaryTbody.innerHTML='';
+      for(const name of Object.keys(perName).sort((a,b)=>a.localeCompare(b))){
+        const tr=document.createElement('tr'); tr.innerHTML=`<td>${escapeHtml(name)}</td><td>${perNameCount[name]||0}</td><td>${(perName[name]||0).toFixed(2)}</td>`; summaryTbody.appendChild(tr);
+      }
+      grandTotal.textContent=`总重量：${totalAll.toFixed(2)} kg`; weightsStatus.textContent=`${Object.keys(weights).length} 条重量记录`; save();
+    }
+
+    async function gasGetDump(){ const res=await fetch(GAS_BASE+'?route=dump'); if(!res.ok) throw new Error('GET dump failed'); return await res.json(); }
+    async function gasUpsertWeights(items){ const res=await fetch(GAS_BASE+'?route=weights_upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})}); if(!res.ok) throw new Error('weights_upsert failed'); return await res.json(); }
+    async function gasAppendRows(items){ const res=await fetch(GAS_BASE+'?route=rows_append',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})}); if(!res.ok) throw new Error('rows_append failed'); return await res.json(); }
+
+    async function pullFromCloud(){
+      if(!GAS_BASE.includes('/exec')){ syncStatus.textContent='未配置 Web App URL'; return; }
+      syncStatus.textContent='拉取中...';
+      try{ const data=await gasGetDump(); weights=data.weights||{}; rows=data.rows||[]; syncStatus.textContent='已从云端载入'; render(); }
+      catch(e){ console.error(e); syncStatus.textContent='拉取失败（离线）'; }
+    }
+    async function pushLocalChanges(){
+      if(!GAS_BASE.includes('/exec')){ syncStatus.textContent='未配置 Web App URL'; return; }
+      syncStatus.textContent='推送中...';
+      try{ if(unsynced.weights.length){ await gasUpsertWeights(unsynced.weights); unsynced.weights=[]; } if(unsynced.rows.length){ await gasAppendRows(unsynced.rows); unsynced.rows=[]; } syncStatus.textContent='推送完成'; }
+      catch(e){ console.error(e); syncStatus.textContent='推送失败（离线）'; }
+    }
+
+    document.getElementById('btnAddWeight').addEventListener('click', ()=>{
+      const t=(weightTrackInput.value||'').trim(); const vRaw=(weightValueInput.value||'').trim(); const v=Number(vRaw);
+      if(!t){ alert('请填写快递单号'); return; } if(!vRaw||isNaN(v)){ alert('请填写有效的重量(kg)'); return; }
+      weights[t]=v; unsynced.weights.push({tracking:t,weight:v}); weightTrackInput.value=''; weightValueInput.value=''; render();
+    });
+    document.getElementById('btnBulkWeights').addEventListener('click', ()=>{ weightsBulkText.value=''; weightsBulkDialog.showModal(); });
+    document.getElementById('weightsBulkConfirm').addEventListener('click',(e)=>{
+      e.preventDefault(); const lines=parseCSV(weightsBulkText.value); let cnt=0; const batch=[];
+      for(const r of lines){ if(r.length<2) continue; const [a,b]=r.map(s=>s.trim()); if(a===''||b==='') continue; let track,w;
+        if(isNaN(Number(a))&&!isNaN(Number(b))){ track=a; w=Number(b);} else if(!isNaN(Number(a))&&isNaN(Number(b))){ track=b; w=Number(a);} else { track=a; w=Number(b);}
+        if(!isNaN(w)){ weights[track]=w; batch.push({tracking:track,weight:w}); cnt++; }
+      }
+      unsynced.weights.push(...batch); weightsBulkDialog.close(); alert(`导入完成：${cnt} 条重量记录`); render();
+    });
+    document.getElementById('btnClearWeights').addEventListener('click', ()=>{ if(confirm('确定要清空重量表吗？（仅清本地，云端不动）')){ weights={}; render(); } });
+    document.getElementById('btnLoadWeights').addEventListener('click', async ()=>{
+      const file=weightsFile.files&&weightsFile.files[0]; if(!file){ alert('请选择一个 CSV 文件'); return; }
+      const txt=await file.text(); const rowsParsed=parseCSV(txt); let cnt=0; const batch=[];
+      for(const r of rowsParsed){ if(r.length<2) continue; const [a,b]=r.map(s=>s.trim()); let track,w;
+        if(isNaN(Number(a))&&!isNaN(Number(b))){ track=a; w=Number(b);} else if(!isNaN(Number(a))&&isNaN(Number(b))){ track=b; w=Number(a);} else { track=a; w=Number(b);}
+        if(!isNaN(w)){ weights[track]=w; batch.push({tracking:track,weight:w}); cnt++; }
+      }
+      unsynced.weights.push(...batch); alert(`导入完成：${cnt} 条重量记录`); render();
+    });
+
+    // ✅ 补上“导出重量CSV”按钮
+    document.getElementById('btnExportWeights').addEventListener('click', ()=>{
+      const lines=['tracking,weight'];
+      for (const [k,v] of Object.entries(weights)) lines.push(`${k},${v}`);
+      downloadCSV('weights.csv', lines.join('\\n'));
+    });
+
+    document.getElementById('btnAdd').addEventListener('click', ()=>{
+      const name=nameInput.value.trim(); const trk=trackInput.value.trim(); if(!name||!trk){ alert('姓名和单号都需要填写'); return; }
+      rows.push({name,tracking:trk}); unsynced.rows.push({name,tracking:trk}); nameInput.value=''; trackInput.value=''; render();
+    });
+    document.getElementById('btnExportRows').addEventListener('click', ()=>{ const lines=['name,tracking']; for(const r of rows) lines.push(`${r.name},${r.tracking}`); downloadCSV('filled_rows.csv',lines.join('\\n')); });
+    document.getElementById('btnClearRows').addEventListener('click', ()=>{ if(confirm('确定要清空所有填报吗？（仅清本地，云端不动）')){ rows=[]; render(); } });
+    document.getElementById('btnPrint').addEventListener('click', ()=>{ window.print(); });
+    document.getElementById('btnBulk').addEventListener('click', ()=>{ bulkText.value=''; bulkDialog.showModal(); });
+    document.getElementById('bulkConfirm').addEventListener('click',(e)=>{
+      e.preventDefault(); const lines=parseCSV(bulkText.value); let added=0; const batch=[];
+      for(const r of lines){ if(r.length<2) continue; let [a,b]=r; a=a.trim(); b=b.trim();
+        if(/\\d/.test(a)&&!/\\d/.test(b)) { rows.push({name:b,tracking:a}); batch.push({name:b,tracking:a}); added++; }
+        else if(/\\d/.test(b)&&!/\\d/.test(a)) { rows.push({name:a,tracking:b}); batch.push({name:a,tracking:b}); added++; }
+        else { rows.push({name:a,tracking:b}); batch.push({name:a,tracking:b}); added++; }
+      }
+      unsynced.rows.push(...batch); bulkDialog.close(); alert(`已添加 ${added} 条记录`); render();
+    });
+
+    document.getElementById('btnSyncPull').addEventListener('click', pullFromCloud);
+    document.getElementById('btnSyncPush').addEventListener('click', pushLocalChanges);
+
+    function downloadCSV(filename,text){ const blob=new Blob([text],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
+
+    load(); render(); pullFromCloud();
+  </script>
+</body>
+</html>
