@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>包裹汇总 · 协作版 (Hard-Bound + AutoSave)</title>
+  <title>包裹汇总 · 协作版（严格字符串 · 无导出/无前缀 · 启动只拉一次 · 修复添加）</title>
   <style>
     :root{--bg:#0f172a;--card:#111827;--muted:#9ca3af;--text:#e5e7eb;--accent:#22d3ee;--good:#10b981;--warn:#f59e0b;--bad:#ef4444}
     *{box-sizing:border-box}body{margin:0;background:#0b1020;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,PingFang SC,Noto Sans SC,"Microsoft YaHei",sans-serif;color:var(--text)}
@@ -18,7 +18,7 @@
     button{cursor:pointer}
     .btn{background:linear-gradient(180deg,#1f9cae,#0aa5b5);border:none;color:#032026;font-weight:700}
     .btn.secondary{background:#0b1020;border:1px solid rgba(34,211,238,.3);color:#9be8f3}
-    .btn.danger{background:linear-gradient(180deg,#f97316,#ef4444);color:white;border:none}
+    .btn.danger{background:linear-gradient(180deg,#ef4444,#f97316);color:white;border:none}
     .btn.muted{background:#0b1020;border:1px solid rgba(255,255,255,.12);color:#cbd5e1}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
     .col-4{grid-column:span 4}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
@@ -30,24 +30,23 @@
     .right{display:flex;gap:10px;justify-content:flex-end;align-items:center}
     .hint{font-size:12px;color:#9ca3af}
     .tag-warn{color:#fbbf24}.tag-good{color:#34d399}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .mono{font-family:ui-monospace,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
     .small{font-size:12px}
     .success{color:#34d399}.error{color:#f87171}
-    #diag{white-space:pre-wrap;background:#0b1020;color:#d7e0ff;padding:10px;border-radius:8px;font-family:ui-monospace,Menlo,monospace;}
+    #diag{white-space:pre-wrap;background:#0b1020;color:#d7e0ff;padding:10px;border-radius:8px;font-family:ui-monospace,Menlo,monospace;max-height:220px;overflow:auto;}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>包裹汇总 · 协作版 <span class="pill">Hard-Bound + AutoSave</span></h1>
-    <p>云端地址：<code class="mono">https://script.google.com/macros/s/AKfycbxmVCub6YgLa-O1SbgnnlEMpWn2voNN_1PYlLRMq8vHkb-l-ZLxbjS0Wi2Q4atqIg-v/exec</code>（已自动写入本地存储以兼容旧版页面）。</p>
+    <h1>包裹汇总 · 协作版 <span class="pill">严格字符串 · 启动只拉一次</span></h1>
+    <p class="small">本版：<b>不导出</b>、<b>上传不加前缀</b>、<b>去掉自动拉取</b>（仅启动时尝试拉取一次云端；之后只在你点按钮时才同步）。修复“添加不了”的脚本错误。</p>
 
     <div class="card">
-      <div class="row">
+      <div class="row" style="align-items:center;gap:12px">
         <button class="btn secondary" id="btnSelfTest">连接自检</button>
         <button class="btn secondary" id="btnPull">云端拉取</button>
-        <button class="btn secondary" id="btnPushRows">上传（姓名+单号）到云端</button>
-        <button class="btn secondary" id="btnPushWeights">上传/更新 重量表到云端</button>
-        <label class="small"><input type="checkbox" id="autoSync" checked> 30 秒自动拉取</label>
+        <button class="btn secondary" id="btnPushRows">提交（姓名+单号）到云端</button>
+        <button class="btn secondary" id="btnPushWeights">上传/更新 重量表</button>
       </div>
       <p id="cloudStatus" class="small">正在连接云端…</p>
       <details>
@@ -61,15 +60,14 @@
         <div class="card">
           <h2>① 上传/录入 重量表</h2>
           <div class="row" style="margin-bottom:8px">
-            <input id="weightTrackInput" placeholder="快递单号" style="flex:1" />
-            <input id="weightValueInput" placeholder="重量(kg)" style="width:140px" />
+            <input id="weightTrackInput" placeholder="快递单号" style="flex:1" inputmode="text" />
+            <input id="weightValueInput" placeholder="重量(kg)" style="width:140px" inputmode="decimal" />
             <button class="btn" id="btnAddWeight">添加/更新</button>
             <button class="btn muted" id="btnBulkWeights">批量粘贴</button>
           </div>
           <div class="row" style="align-items:center">
             <input id="weightsFile" type="file" accept=".csv,text/csv" />
             <button class="btn" id="btnLoadWeights">载入重量表</button>
-            <button class="btn secondary" id="btnExportWeights">导出当前重量表</button>
             <button class="btn danger" id="btnClearWeights">清空重量表</button>
           </div>
           <p id="weightsStatus" class="hint">未加载。</p>
@@ -81,13 +79,12 @@
           <h2>② 填写：姓名 + 快递单号</h2>
           <div class="row">
             <input id="nameInput" placeholder="姓名（必填）" style="flex:1" />
-            <input id="trackInput" placeholder="快递单号（必填）" style="flex:1" />
+            <input id="trackInput" placeholder="快递单号（必填）" style="flex:1" inputmode="text" />
             <button class="btn" id="btnAdd">添加</button>
             <button class="btn muted" id="btnBulk">批量粘贴</button>
           </div>
-          <p class="hint">批量格式：每行 <span class="mono">姓名,单号</span> 或 <span class="mono">单号,姓名</span>（自动识别）。</p>
+          <p class="hint">批量支持：<span class="mono">姓名,单号</span> / <span class="mono">单号,姓名</span>；也支持<strong>仅单号一列</strong>（会询问默认姓名）。</p>
           <div class="right" style="margin-top:8px">
-            <button class="btn secondary" id="btnExportRows">导出填报CSV</button>
             <button class="btn danger" id="btnClearRows">清空填报</button>
           </div>
         </div>
@@ -140,7 +137,7 @@
     <form method="dialog" style="margin:0">
       <div class="card" style="background:#0b1020">
         <h2>批量粘贴</h2>
-        <textarea id="bulkText" rows="10" style="width:100%" placeholder="示例：&#10;张三,SF-123&#10;yt7583330367851,李四"></textarea>
+        <textarea id="bulkText" rows="10" style="width:100%" placeholder="示例：&#10;张三,SF-123&#10;yt7583330367851,李四&#10;&#10;或仅一列：&#10;75831588165&#10;73587793517"></textarea>
         <div class="right" style="margin-top:10px">
           <button class="btn muted" value="cancel">取消</button>
           <button class="btn" id="bulkConfirm" value="default">添加</button>
@@ -163,32 +160,31 @@
   </dialog>
 
   <script>
-    // 把 URL 强制写入两套 key（兼容旧页面）
+    // ——— 基本设置 ———
     const HARDBOUND_URL = "https://script.google.com/macros/s/AKfycbxmVCub6YgLa-O1SbgnnlEMpWn2voNN_1PYlLRMq8vHkb-l-ZLxbjS0Wi2Q4atqIg-v/exec";
     localStorage.setItem('pkg_cloud_url', HARDBOUND_URL);
     localStorage.setItem('pkg_cloud_url_fix', HARDBOUND_URL);
 
     const LS_WEIGHTS = 'pkg_weights_v1';
     const LS_ROWS    = 'pkg_rows_v1';
-    const PING_SECS  = 30;
 
-    function normTrack(x){ 
-      return String(x||'')
-        .replace(/[\u200B-\u200D\uFEFF]/g,'')   // 零宽
-        .trim()
-        .replace(/[\s-]+/g,'')                  // 去空格/连字符
+    // ——— 只移除零宽字符与空白（使用 RegExp 构造，避免转义错误） ———
+    const ZERO_WIDTH_RE = new RegExp('[\\u200B-\\u200D\\uFEFF]', 'g');
+    const WS_RE = new RegExp('\\s+', 'g');
+    function normTrack(x){
+      return String(x ?? '')
+        .replace(ZERO_WIDTH_RE, '')
+        .replace(WS_RE, '')
         .toUpperCase();
     }
-
-    // 追踪号校验（防止科学计数法/小数点/非法字符/过短）
-    function validateTrackingRaw(raw){
-      const s = String(raw ?? '');
-      if (/[.]/.test(s) || /e\+?/i.test(s)) return {ok:false, reason:'检测到科学计数法/小数点'};
-      const n = normTrack(s);
-      if (!n) return {ok:false, reason:'为空'};
-      if (!/^[A-Z0-9]+$/.test(n)) return {ok:false, reason:'存在非字母数字字符'};
-      if (n.length < 10) return {ok:false, reason:'长度过短（<10）'};
-      return {ok:true, norm:n};
+    function validateTracking(raw){
+      const s0 = String(raw ?? '');
+      if (/[.]/.test(s0) || /e\+?/i.test(s0)) return {ok:false, reason:'检测到科学计数法/小数点'};
+      const s = normTrack(s0);
+      if (!s) return {ok:false, reason:'为空'};
+      if (!/^[A-Z0-9]+$/.test(s)) return {ok:false, reason:'存在非字母数字字符'};
+      if (s.length < 8) return {ok:false, reason:'长度过短（<8）'};
+      return {ok:true, norm:s};
     }
 
     let weights = {};
@@ -204,7 +200,7 @@
 
     function dlog(...a){ const msg = a.map(x => typeof x==='string'? x : JSON.stringify(x)).join(' '); if(diag) diag.textContent += msg + '\n'; }
 
-    function escapeHtml(s){ return String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+    function escapeHtml(s){ return String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
     function save(){ localStorage.setItem(LS_WEIGHTS, JSON.stringify(weights)); localStorage.setItem(LS_ROWS, JSON.stringify(rows)); }
     function load(){
       try{weights = JSON.parse(localStorage.getItem(LS_WEIGHTS)||'{}')||{}}catch{weights={}}
@@ -225,18 +221,16 @@
         mainTbody.appendChild(tr); }
       summaryTbody.innerHTML = '';
       for(const name of Object.keys(perName).sort((a,b)=>a.localeCompare(b))){ const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${(perNameCount[name]||0)}</td><td>${(perName[name]||0).toFixed(2)}</td>`; summaryTbody.appendChild(tr); }
+        tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${perNameCount[name]||0}</td><td>${(perName[name]||0).toFixed(2)}</td>`; summaryTbody.appendChild(tr); }
       grandTotal.textContent = `总重量：${totalAll.toFixed(2)} kg`;
       const knownCount = Object.keys(weights).length; if(weightsStatus) weightsStatus.textContent = knownCount? `已载入 ${knownCount} 条单号重量。` : '未加载。'; save();
     }
 
-    // 修正换行正则（真实 \r/\n）
     function parseCSV(text){
       if(text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
       text = text.replace(/\r\n?/g, '\n');
-      return text.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/[,	，]/).map(s=>s.trim()));
+      return text.split('\n').map(l=>l.trim()).filter(Boolean).map(l=> l.split(/[\t,，]/).map(s=>s.trim()));
     }
-
     function importRowsAsWeights(rowsParsed){
       let cnt=0, skipped=0;
       const hasHeader = rowsParsed.length>0 && rowsParsed[0].length>=2 && (/track|order|waybill|单号|运单|物流/i.test(rowsParsed[0][0]) || /weight|重量/i.test(rowsParsed[0][1]));
@@ -249,148 +243,189 @@
       return {cnt, skipped};
     }
 
-    function downloadCSV(filename, text){ const blob = new Blob([text], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
-
-    // 本地事件（重量表）
-    document.getElementById('btnAddWeight').addEventListener('click', ()=>{
-      const t = normTrack(document.getElementById('weightTrackInput').value);
-      const vRaw = (document.getElementById('weightValueInput').value||'').trim(); const v = Number(vRaw.replace(',', '.'));
-      if(!t){ alert('请填写快递单号'); return; } if(!vRaw || isNaN(v)){ alert('请填写有效的重量(kg)'); return; }
-      weights[t] = v; document.getElementById('weightTrackInput').value=''; document.getElementById('weightValueInput').value=''; render();
-    });
-    document.getElementById('btnBulkWeights').addEventListener('click', ()=>{ document.getElementById('weightsBulkText').value=''; document.getElementById('weightsBulkDialog').showModal(); });
-    document.getElementById('weightsBulkConfirm').addEventListener('click', (e)=>{
-      e.preventDefault(); const {cnt, skipped} = importRowsAsWeights(parseCSV(document.getElementById('weightsBulkText').value));
-      document.getElementById('weightsBulkDialog').close(); alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`); render();
-    });
-    document.getElementById('btnClearWeights').addEventListener('click', ()=>{ if(confirm('确定要清空重量表吗？')) { weights = {}; render(); } });
-    document.getElementById('btnExportWeights').addEventListener('click', ()=>{
-      const lines=['tracking,weight']; for(const [k,v] of Object.entries(weights)){ lines.push(`${k},${v}`); } downloadCSV('weights_export.csv', lines.join('\n'));
-    });
-    document.getElementById('btnLoadWeights').addEventListener('click', async ()=>{
-      const file = document.getElementById('weightsFile').files?.[0]; if(!file){ alert('请选择一个 CSV 文件'); return; }
-      const txt = await file.text(); let rowsParsed = parseCSV(txt);
-      if(rowsParsed.length === 1){ const text2 = txt.replace(/\n/g, '\r').replace(/\r\r+/g, '\r'); const lines2 = text2.split('\r'); if(lines2.length > 1){ rowsParsed = lines2.map(l => l.trim()).filter(Boolean).map(l => l.split(/[,	，]/).map(s => s.trim())); } }
-      const {cnt, skipped} = importRowsAsWeights(rowsParsed); alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`); render();
-    });
-
-    // 本地事件（姓名+单号） —— 启用校验 + 本地重复仅提示不拦截
-    document.getElementById('btnAdd').addEventListener('click', ()=>{
-      const name = (document.getElementById('nameInput').value||'').trim();
-      const raw  = (document.getElementById('trackInput').value||'');
-      if(!name){ alert('请填写姓名'); return; }
-      const chk = validateTrackingRaw(raw);
-      if(!chk.ok){ alert(`单号不合法：${chk.reason}\n原始输入: "${raw}"`); return; }
-      const trk = chk.norm;
-
-      // 仅提示本地重复（不去重）
-      const dup = rows.some(r => r.name.trim()===name && normTrack(r.tracking)===trk);
-      if(dup){
-        if(!confirm(`检测到本地已存在相同条目：\n${name} , ${trk}\n是否仍要添加？`)) return;
-      }
-
-      rows.push({name, tracking: trk});
-      document.getElementById('nameInput').value=''; document.getElementById('trackInput').value='';
-      render();
-    });
-
-    document.getElementById('btnExportRows').addEventListener('click', ()=>{
-      const lines=['name,tracking']; for(const r of rows) lines.push(`${r.name},${r.tracking}`); downloadCSV('filled_rows.csv', lines.join('\n'));
-    });
-    document.getElementById('btnClearRows').addEventListener('click', ()=>{ if(confirm('确定要清空所有填报吗？')){ rows=[]; render(); } });
-    document.getElementById('btnPrint').addEventListener('click', ()=>{ window.print(); });
-
-    document.getElementById('btnBulk').addEventListener('click', ()=>{ document.getElementById('bulkText').value=''; document.getElementById('bulkDialog').showModal(); });
-    document.getElementById('bulkConfirm').addEventListener('click', (e)=>{
-      e.preventDefault();
-      const lines = parseCSV(document.getElementById('bulkText').value);
-      let added=0, bad=[], dupWarn=0;
-      for(const r of lines){
-        if(r.length<2) continue;
-        let [a,b]=r; a=String(a).trim(); b=String(b).trim();
-        const AisTrack=/\d/.test(a); const BisTrack=/\d/.test(b);
-        const candidate = AisTrack && !BisTrack ? a : (!AisTrack && BisTrack ? b : b);
-        const name = (candidate===a)? b : a;
-        const chk  = validateTrackingRaw(candidate);
-        if(!chk.ok){ bad.push({line:r.join(','), reason:chk.reason}); continue; }
-        const trk = chk.norm;
-
-        // 仅提示重复，不拦截
-        const dup = rows.some(x => x.name.trim()===name && normTrack(x.tracking)===trk);
-        if(dup) dupWarn++;
-
-        rows.push({name, tracking: trk});
-        added++;
-      }
-      document.getElementById('bulkDialog').close();
-      let msg = `批量导入完成：新增 ${added} 条`;
-      if(dupWarn) msg += `；其中 ${dupWarn} 条与本地重复（已保留，未去重）。`;
-      if(bad.length) msg += `；非法 ${bad.length} 条（已跳过）。`;
-      alert(msg);
-      if (bad.length && diag) {
-        diag.textContent += `[BULK BAD] 示例（最多 10 条）：\n`+
-          bad.slice(0,10).map(x=>` - ${x.line}  => ${x.reason}`).join('\n')+'\n';
-      }
-      render();
-    });
-
-    // 云端（保持 text/plain 上传，不做去重上传）
+    // ——— 云端（text/plain） ———
     function updateCloudStatus(ok,msg){ cloudStatus.innerHTML = (ok? '<span class=success>✓</span> ':'<span class=error>✗</span> ')+ (msg||''); }
-    async function cloudGet(){
+
+    async function cloudFetch(){
       const r = await fetch(HARDBOUND_URL+'?t='+(Date.now()), {method:'GET', redirect:'follow'});
-      const text = await r.text(); const data = JSON.parse(text);
+      const text = await r.text();
+      return JSON.parse(text);
+    }
+
+    async function cloudGet(){ // 手动拉取：直接覆盖
+      const data = await cloudFetch();
       const wMap = {}; for(const arr of (data.weights||[]).slice(1)){ if(!arr) continue; const k = normTrack(String(arr[0])); const v = Number(arr[1]); if(k && !isNaN(v)) wMap[k]=v; }
       weights = wMap;
-
-      // 拉取 rows 时也按字符串处理 & 归一化
-      rows = (data.rows||[]).slice(1).map(a=>{
-        const nm = String(a?.[0] ?? '').trim();
-        const raw = String(a?.[1] ?? '');
-        const chk = validateTrackingRaw(raw);
-        return {name:nm, tracking: chk.ok ? chk.norm : normTrack(raw)};
-      });
-
+      rows = (data.rows||[]).slice(1).map(a=>({name:String(a?.[0]||'').trim(), tracking: normTrack(String(a?.[1]||''))}));
       render();
       updateCloudStatus(true, '已拉取云端最新：'+ (new Date(data.updatedAt||Date.now())).toLocaleString());
     }
+
+    async function initialPull(){ // 启动时拉一次：如果云端为空，则不覆盖本地
+      try{
+        const data = await cloudFetch();
+        const rowsData = (data.rows||[]).slice(1);
+        const weightsData = (data.weights||[]).slice(1);
+        const hasRows = rowsData.length > 0;
+        const hasWeights = weightsData.length > 0;
+
+        if (hasRows || hasWeights){
+          const wMap = {}; for(const arr of weightsData){ if(!arr) continue; const k = normTrack(String(arr[0])); const v = Number(arr[1]); if(k && !isNaN(v)) wMap[k]=v; }
+          weights = wMap;
+          rows = rowsData.map(a=>({name:String(a?.[0]||'').trim(), tracking: normTrack(String(a?.[1]||''))}));
+          render();
+          updateCloudStatus(true, '启动已拉取：'+ (new Date(data.updatedAt||Date.now())).toLocaleString());
+        }else{
+          updateCloudStatus(true, '启动检测到云端为空：保持本地数据不变');
+        }
+      }catch(e){
+        updateCloudStatus(false, '启动拉取失败：'+ e.message);
+      }
+    }
+
     async function cloudPost(payload){
       const r = await fetch(HARDBOUND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload), redirect:'follow' });
       const text = await r.text(); try{ return JSON.parse(text); }catch(e){ throw new Error('返回不是 JSON：'+ text.slice(0,200)); }
     }
 
+    // ——— 事件绑定 ———
+    document.getElementById('btnAddWeight').addEventListener('click', ()=>{
+      const t = normTrack(document.getElementById('weightTrackInput').value);
+      const vRaw = (document.getElementById('weightValueInput').value||'').trim();
+      const v = Number(vRaw.replace(',', '.'));
+      if(!t){ alert('请填写快递单号'); return; }
+      if(!vRaw || isNaN(v)){ alert('请填写有效的重量(kg)'); return; }
+      weights[t] = v;
+      document.getElementById('weightTrackInput').value='';
+      document.getElementById('weightValueInput').value='';
+      render();
+    });
+
+    document.getElementById('btnAdd').addEventListener('click', ()=>{
+      const name = (document.getElementById('nameInput').value||'').trim();
+      const raw  = (document.getElementById('trackInput').value||'');
+      if(!name){ alert('请填写姓名'); return; }
+      const chk = validateTracking(raw);
+      if(!chk.ok){ alert(`单号不合法：${chk.reason}\n原始输入: "${raw}"`); return; }
+      const trk = chk.norm;
+      const dup = rows.some(r => r.name.trim()===name && normTrack(r.tracking)===trk);
+      if(dup){
+        if(!confirm(`检测到本地已存在相同条目：\n${name} , ${trk}\n是否仍要添加？`)) return;
+      }
+      rows.push({name, tracking: trk});
+      document.getElementById('nameInput').value='';
+      document.getElementById('trackInput').value='';
+      render();
+    });
+
+    document.getElementById('btnClearRows').addEventListener('click', ()=>{
+      if(confirm('确定要清空所有填报吗？')){
+        rows=[]; render();
+      }
+    });
+
+    document.getElementById('btnPrint').addEventListener('click', ()=>{ window.print(); });
+
+    document.getElementById('btnBulk').addEventListener('click', ()=>{
+      document.getElementById('bulkText').value='';
+      document.getElementById('bulkDialog').showModal();
+    });
+
+    document.getElementById('bulkConfirm').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const lines = parseCSV(document.getElementById('bulkText').value);
+      let defaultName = (document.getElementById('nameInput').value || '').trim();
+      if (!defaultName) defaultName = prompt('批量导入：检测到有些行只有快递单号。请输入这些行使用的默认姓名：', '') || '(未命名)';
+      let added=0, bad=[], dupWarn=0, singleCol=0, multiCol=0;
+      for(const r of lines){
+        if(r.length===0) continue;
+        if(r.length===1){
+          const rawTrack = String(r[0]).trim();
+          const chk  = validateTracking(rawTrack);
+          if(!chk.ok){ bad.push({line:r.join(','), reason:chk.reason}); continue; }
+          const trk = chk.norm;
+          const name = defaultName;
+          const dup = rows.some(x => x.name.trim()===name && normTrack(x.tracking)===trk);
+          if(dup) dupWarn++;
+          rows.push({name, tracking: trk});
+          added++; singleCol++;
+          continue;
+        }
+        // 两列的情况：自动识别哪一列是单号
+        let [a,b]=r; a=String(a).trim(); b=String(b).trim();
+        const AisTrack=/\d/.test(a); const BisTrack=/\d/.test(b);
+        const candidate = (AisTrack && !BisTrack) ? a : ((!AisTrack && BisTrack) ? b : b);
+        const name = (candidate===a)? b : a;
+        const chk  = validateTracking(candidate);
+        if(!chk.ok){ bad.push({line:r.join(','), reason:chk.reason}); continue; }
+        const trk = chk.norm;
+        const dup = rows.some(x => x.name.trim()===name && normTrack(x.tracking)===trk);
+        if(dup) dupWarn++;
+        rows.push({name, tracking: trk});
+        added++; multiCol++;
+      }
+      document.getElementById('bulkDialog').close();
+      let msg = `批量导入完成：新增 ${added} 条`;
+      if(singleCol) msg += `（其中单列 ${singleCol} 条，使用默认姓名 "${defaultName}"）`;
+      if(multiCol) msg += `；双列 ${multiCol} 条`;
+      if(dupWarn) msg += `；与本地重复 ${dupWarn} 条（已保留，未去重）`;
+      if(bad.length) msg += `；非法 ${bad.length} 条（已跳过）`;
+      alert(msg);
+      render();
+    });
+
+    document.getElementById('btnBulkWeights').addEventListener('click', ()=>{
+      document.getElementById('weightsBulkText').value='';
+      document.getElementById('weightsBulkDialog').showModal();
+    });
+    document.getElementById('weightsBulkConfirm').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const {cnt, skipped} = importRowsAsWeights(parseCSV(document.getElementById('weightsBulkText').value));
+      document.getElementById('weightsBulkDialog').close();
+      alert(`导入完成：${cnt} 条重量记录（跳过 ${skipped} 条）`);
+      render();
+    });
+
+    // —— 云端按钮 ——
     document.getElementById('btnSelfTest').addEventListener('click', async ()=>{
-      try{ await cloudGet(); await cloudPost({op:'appendRows', rows:[{name:'(自检)', tracking:'TEST123'}]}); updateCloudStatus(true, '自检 OK'); }
-      catch(e){ console.error(e); updateCloudStatus(false, '自检失败：'+ e.message); alert('自检失败：'+ e.message); }
+      try{
+        await cloudGet();
+        await cloudPost({op:'appendRows', rows:[{name:'(自检)', tracking:'TEST1234567890'}]});
+        updateCloudStatus(true, '自检 OK');
+      }catch(e){
+        console.error(e);
+        updateCloudStatus(false, '自检失败：'+ e.message);
+        alert('自检失败：'+ e.message);
+      }
     });
     document.getElementById('btnPull').addEventListener('click', async ()=>{
-      try{ await cloudGet(); }catch(e){ console.error(e); updateCloudStatus(false, e.message); alert(e.message); }
+      try{ await cloudGet(); }
+      catch(e){ console.error(e); updateCloudStatus(false, e.message); alert(e.message); }
     });
     document.getElementById('btnPushRows').addEventListener('click', async ()=>{
       try{
-        // 直接上传，不做去重；此处维持原有行为
         const res = await cloudPost({ op:'appendRows', rows });
         updateCloudStatus(true, '已追加 '+rows.length+' 条到云端。');
       } catch(e){
-        console.error(e); updateCloudStatus(false,e.message); alert(e.message);
+        console.error(e);
+        updateCloudStatus(false,e.message);
+        alert(e.message);
       }
     });
     document.getElementById('btnPushWeights').addEventListener('click', async ()=>{
-      try{ const arr = Object.entries(weights).map(([k,v])=>({tracking:k, weight:Number(v)})); const res = await cloudPost({ op:'upsertWeights', weights: arr }); updateCloudStatus(true, '已上传/更新 '+arr.length+' 条重量到云端。'); }
-      catch(e){ console.error(e); updateCloudStatus(false,e.message); alert(e.message); }
+      try{
+        const arr = Object.entries(weights).map(([k,v])=>({tracking:k, weight:Number(v)}));
+        const res = await cloudPost({ op:'upsertWeights', weights: arr });
+        updateCloudStatus(true, '已上传/更新 '+arr.length+' 条重量到云端。');
+      } catch(e){
+        console.error(e);
+        updateCloudStatus(false,e.message);
+        alert(e.message);
+      }
     });
 
-    // 初始：自动拉取一次
-    (async ()=>{ try{ await cloudGet(); } catch(e){ updateCloudStatus(false, '拉取失败：'+e.message+' · 请检查 WebApp 权限为“任何人”。'); } })();
-
-    // 可选：30s 自动拉取
-    const auto = document.getElementById('autoSync');
-    let timer = null;
-    function startAuto(){
-      if(timer) clearInterval(timer);
-      if(auto && auto.checked) timer = setInterval(()=> cloudGet().catch(()=>{}), PING_SECS*1000);
-    }
-    auto && auto.addEventListener('change', startAuto);
-    startAuto();
+    // 启动：只拉一次，不再自动轮询；若云端为空则保留本地
+    (async ()=>{ await initialPull(); })();
   </script>
 </body>
 </html>
